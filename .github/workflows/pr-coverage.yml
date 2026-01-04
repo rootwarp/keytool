@@ -21,6 +21,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install gotest
+        run: go install github.com/rakyll/gotest@latest
+
       - name: Run coverage
         run: make coverage
 
