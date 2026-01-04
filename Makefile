@@ -1,4 +1,4 @@
-.PHONY: build clean test coverage
+.PHONY: build clean test coverage lint
 
 BINARY_NAME=keytool
 BUILD_DIR=bin
@@ -16,3 +16,6 @@ test:
 coverage:
 	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
+
+lint:
+	golangci-lint run ./...

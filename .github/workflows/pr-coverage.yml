@@ -1,0 +1,100 @@
+name: PR Coverage Report
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run coverage
+        run: make coverage
+
+      - name: Generate coverage markdown
+        id: coverage
+        run: |
+          # Get total coverage percentage
+          TOTAL=$(go tool cover -func=coverage.out | grep total | awk '{print $3}')
+
+          # Generate markdown report
+          cat << 'EOF' > coverage.md
+          ## 📊 Coverage Report
+
+          EOF
+
+          echo "**Total Coverage: ${TOTAL}**" >> coverage.md
+          echo "" >> coverage.md
+          echo "<details>" >> coverage.md
+          echo "<summary>Coverage by function</summary>" >> coverage.md
+          echo "" >> coverage.md
+          echo '```' >> coverage.md
+          go tool cover -func=coverage.out >> coverage.md
+          echo '```' >> coverage.md
+          echo "</details>" >> coverage.md
+
+          # Store for PR comment (handle multiline)
+          {
+            echo 'COVERAGE_REPORT<<EOF'
+            cat coverage.md
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.md
+            coverage.out
+            coverage.html
+
+      - name: Post coverage comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const coverageReport = fs.readFileSync('coverage.md', 'utf8');
+
+            // Find existing coverage comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('## 📊 Coverage Report')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: coverageReport
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: coverageReport
+              });
+            }
