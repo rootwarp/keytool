@@ -11,6 +11,7 @@ import (
 
 	"github.com/rootwarp/keytool/pkg/keystore"
 	"github.com/rootwarp/keytool/pkg/mnemonic"
+	"github.com/rootwarp/keytool/pkg/splitter"
 	"github.com/rootwarp/keytool/pkg/wallet"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/term"
@@ -30,6 +31,10 @@ saved to the specified directory.`,
 				Name:     "keystore-dir",
 				Usage:    "Directory to save keystore file (required)",
 				Required: true,
+			},
+			&cli.StringFlag{
+				Name:  "shard-dir",
+				Usage: "Directory to save secret shards (optional, enables secret splitting)",
 			},
 		},
 		Action: runNewAccount,
@@ -80,6 +85,28 @@ func runNewAccount(c *cli.Context) error {
 	}
 
 	_, _ = fmt.Fprintf(c.App.Writer, "\nKeystore saved to: %s\n", keystorePath)
+
+	// Split secret if shard-dir is provided
+	shardDir := c.String("shard-dir")
+	if shardDir != "" {
+		secretSplitter, err := splitter.NewSplitter(2, 2)
+		if err != nil {
+			return fmt.Errorf("failed to create splitter: %w", err)
+		}
+
+		secretData := splitter.SecretData{
+			Address:  account.Address,
+			Mnemonic: account.Mnemonic,
+			HDPath:   account.HDPath,
+		}
+
+		if err := secretSplitter.Split(secretData, shardDir); err != nil {
+			return fmt.Errorf("failed to split secret: %w", err)
+		}
+
+		_, _ = fmt.Fprintf(c.App.Writer, "Secret shards saved to: %s (%d files)\n",
+			shardDir, secretSplitter.TotalShards())
+	}
 
 	return nil
 }
